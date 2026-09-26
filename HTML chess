@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two-Player Chess Clock</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<style>
+  :root{
+    --cream:#EDE6D6;
+    --dark-sq:#4A5D3A;
+    --light-sq:#EDE6D6;
+    --board-frame:#2B2620;
+    --ink:#211D17;
+    --paper:#F6F1E7;
+    --panel:#FFFFFF;
+    --accent:#B5502F;
+    --accent-soft:#E8C9A0;
+    --line:#D9D0BC;
+    --muted:#6E6656;
+    --good:#3E6B4A;
+    --danger:#A6402A;
+    --sel-ring:#B5502F;
+    --move-dot:rgba(43,38,32,0.45);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+    min-height:100vh;
+    padding:24px 16px 48px;
+  }
+  .wrap{max-width:920px;margin:0 auto;}
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:16px;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:22px;
+    flex-wrap:wrap;
+  }
+  h1{
+    font-size:1.9rem;
+    font-weight:600;
+    margin:0;
+    letter-spacing:0.01em;
+  }
+  .tagline{
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    font-size:0.8rem;
+    color:var(--muted);
+    margin-top:2px;
+  }
+  .setup{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:18px 20px;
+    margin-bottom:22px;
+    display:flex;
+    gap:22px;
+    flex-wrap:wrap;
+    align-items:flex-end;
+  }
+  .field label{
+    display:block;
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    font-size:0.72rem;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  select, button{
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    font-size:0.9rem;
+  }
+  select{
+    padding:7px 10px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    background:var(--paper);
+    color:var(--ink);
+  }
+  .btn{
+    padding:9px 18px;
+    border-radius:4px;
+    border:1px solid var(--ink);
+    background:var(--ink);
+    color:var(--paper);
+    cursor:pointer;
+    font-weight:600;
+  }
+  .btn:hover{opacity:0.85;}
+  .btn.secondary{
+    background:transparent;
+    color:var(--ink);
+    border:1px solid var(--ink);
+  }
+  .layout{
+    display:grid;
+    grid-template-columns:1fr 280px;
+    gap:22px;
+  }
+  @media (max-width:760px){
+    .layout{grid-template-columns:1fr;}
+  }
+  .board-col{display:flex;flex-direction:column;align-items:center;gap:12px;}
+  .clock-row{
+    display:flex;
+    justify-content:space-between;
+    width:100%;
+    max-width:520px;
+  }
+  .clock{
+    font-family:'Courier New',monospace;
+    font-size:1.5rem;
+    font-weight:700;
+    padding:8px 16px;
+    border-radius:5px;
+    border:1px solid var(--line);
+    background:var(--panel);
+    min-width:104px;
+    text-align:center;
+    letter-spacing:0.02em;
+  }
+  .clock.active{
+    border-color:var(--accent);
+    box-shadow:0 0 0 2px var(--accent-soft) inset;
+  }
+  .clock.low{color:var(--danger);}
+  .clock-label{
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    font-size:0.68rem;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    text-align:center;
+    margin-bottom:3px;
+  }
+  #board{
+    display:grid;
+    grid-template-columns:repeat(8,1fr);
+    grid-template-rows:repeat(8,1fr);
+    width:100%;
+    max-width:520px;
+    aspect-ratio:1/1;
+    border:10px solid var(--board-frame);
+    border-radius:3px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.18);
+  }
+  .sq{
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:clamp(1.6rem,6vw,2.6rem);
+    cursor:pointer;
+    user-select:none;
+  }
+  .sq.light{background:var(--light-sq);}
+  .sq.dark{background:var(--dark-sq);}
+  .sq .piece{
+    line-height:1;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,0.35));
+    transition:transform 0.08s ease;
+  }
+  .sq.selected{box-shadow:inset 0 0 0 3px var(--sel-ring);}
+  .sq.last{box-shadow:inset 0 0 0 3px rgba(181,80,47,0.55);}
+  .sq .dot{
+    position:absolute;
+    width:26%;
+    height:26%;
+    border-radius:50%;
+    background:var(--move-dot);
+    pointer-events:none;
+  }
+  .sq .ring{
+    position:absolute;
+    width:82%;
+    height:82%;
+    border-radius:50%;
+    border:4px solid var(--move-dot);
+    pointer-events:none;
+  }
+  .sq.check{box-shadow:inset 0 0 0 3px var(--danger);}
+  .coord{
+    position:absolute;
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    font-size:0.62rem;
+    color:rgba(0,0,0,0.35);
+    top:2px;
+    left:3px;
+    pointer-events:none;
+  }
+  .status-line{
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    font-size:0.95rem;
+    min-height:1.3em;
+    text-align:center;
+  }
+  .side-panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:16px 18px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    height:fit-content;
+  }
+  .side-panel h2{
+    font-size:0.95rem;
+    margin:0;
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+    border-bottom:1px solid var(--line);
+    padding-bottom:8px;
+  }
+  #moves{
+    font-family:'Courier New',monospace;
+    font-size:0.85rem;
+    max-height:280px;
+    overflow-y:auto;
+    line-height:1.6;
+  }
+  #moves .mv-row{display:flex;gap:8px;}
+  #moves .mv-num{color:var(--muted);width:26px;flex-shrink:0;}
+  #moves .mv-w, #moves .mv-b{flex:1;cursor:default;}
+  .actions{display:flex;flex-direction:column;gap:8px;}
+  .promo-overlay{
+    position:fixed;inset:0;
+    background:rgba(33,29,23,0.55);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:20;
+  }
+  .promo-overlay.show{display:flex;}
+  .promo-box{
+    background:var(--panel);
+    border-radius:8px;
+    padding:18px;
+    display:flex;
+    gap:12px;
+  }
+  .promo-box button{
+    font-size:2.2rem;
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:6px;
+    width:64px;height:64px;
+    cursor:pointer;
+  }
+  .promo-box button:hover{background:var(--accent-soft);}
+  .end-overlay{
+    position:fixed;inset:0;
+    background:rgba(33,29,23,0.6);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:20;
+  }
+  .end-overlay.show{display:flex;}
+  .end-card{
+    background:var(--panel);
+    border-radius:8px;
+    padding:28px 32px;
+    max-width:340px;
+    text-align:center;
+  }
+  .end-card h2{margin:0 0 6px;font-size:1.4rem;}
+  .end-card p{
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    color:var(--muted);
+    font-size:0.88rem;
+    margin:0 0 18px;
+  }
+  footer{
+    margin-top:32px;
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    font-size:0.72rem;
+    color:var(--muted);
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Two-Player Chess Clock</h1>
+      <div class="tagline">Play locally, one board, two clocks &mdash; resets itself on checkmate or draw</div>
+    </div>
+  </header>
+
+  <div class="setup">
+    <div class="field">
+      <label for="timeSelect">Time control</label>
+      <select id="timeSelect">
+        <option value="1">Bullet &middot; 1 min</option>
+        <option value="3">Blitz &middot; 3 min</option>
+        <option value="5" selected>Blitz &middot; 5 min</option>
+        <option value="10">Rapid &middot; 10 min</option>
+        <option value="15">Rapid &middot; 15 min</option>
+        <option value="30">Classical &middot; 30 min</option>
+        <option value="0">No clock</option>
+      </select>
+    </div>
+    <button class="btn" id="startBtn">Start new game</button>
+    <button class="btn secondary" id="flipBtn">Flip board</button>
+  </div>
+
+  <div class="layout">
+    <div class="board-col">
+      <div class="clock-row">
+        <div>
+          <div class="clock-label" id="topLabel">Black</div>
+          <div class="clock" id="clockTop">05:00</div>
+        </div>
+        <div>
+          <div class="clock-label" id="bottomLabel">White</div>
+          <div class="clock" id="clockBottom">05:00</div>
+        </div>
+      </div>
+      <div id="board"></div>
+      <div class="status-line" id="statusLine">White to move &mdash; set a time control and press Start</div>
+    </div>
+
+    <div class="side-panel">
+      <div>
+        <h2>Moves</h2>
+        <div id="moves"></div>
+      </div>
+      <div class="actions">
+        <button class="btn secondary" id="resignW">White resigns</button>
+        <button class="btn secondary" id="resignB">Black resigns</button>
+        <button class="btn secondary" id="drawBtn">Agree to draw</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>Click a piece, then click a highlighted square to move. Runs entirely in the browser &mdash; no server, no install.</footer>
+</div>
+
+<div class="promo-overlay" id="promoOverlay">
+  <div class="promo-box" id="promoBox"></div>
+</div>
+
+<div class="end-overlay" id="endOverlay">
+  <div class="end-card">
+    <h2 id="endTitle">Checkmate</h2>
+    <p id="endDesc">White wins.</p>
+    <button class="btn" id="playAgainBtn">Play again</button>
+  </div>
+</div>
+
+<script>
+const PIECE_GLYPH = {
+  w:{p:'♙',n:'♘',b:'♗',r:'♖',q:'♕',k:'♔'},
+  b:{p:'♟',n:'♞',b:'♝',r:'♜',q:'♛',k:'♚'}
+};
+
+let game = new Chess();
+let selected = null;      // square string e.g. 'e2'
+let legalTargets = [];    // list of move objects for the selected piece
+let flipped = false;
+let lastMove = null;
+let clockMinutes = 5;
+let timeW = 0, timeB = 0;
+let clockRunning = false;
+let clockInterval = null;
+let gameLive = false;
+
+const boardEl = document.getElementById('board');
+const statusLine = document.getElementById('statusLine');
+const clockTopEl = document.getElementById('clockTop');
+const clockBottomEl = document.getElementById('clockBottom');
+const topLabel = document.getElementById('topLabel');
+const bottomLabel = document.getElementById('bottomLabel');
+const movesEl = document.getElementById('moves');
+const promoOverlay = document.getElementById('promoOverlay');
+const promoBox = document.getElementById('promoBox');
+const endOverlay = document.getElementById('endOverlay');
+
+function squareName(fileIdx, rankIdx){ // fileIdx 0-7 (a-h), rankIdx 0-7 (rank8..rank1 as stored)
+  const files='abcdefgh';
+  return files[fileIdx]+(8-rankIdx);
+}
+
+function buildBoard(){
+  boardEl.innerHTML='';
+  const board = game.board(); // 8x8, [0][0] = a8
+  for(let r=0;r<8;r++){
+    for(let f=0;f<8;f++){
+      const displayR = flipped ? 7-r : r;
+      const displayF = flipped ? 7-f : f;
+      const sq = squareName(displayF, displayR);
+      const piece = board[displayR][displayF];
+      const isLight = (displayF + displayR) % 2 === 1;
+      const div = document.createElement('div');
+      div.className = 'sq ' + (isLight ? 'light':'dark');
+      div.dataset.sq = sq;
+      if(piece){
+        const span = document.createElement('span');
+        span.className='piece';
+        span.textContent = PIECE_GLYPH[piece.color][piece.type];
+        div.appendChild(span);
+      }
+      if(lastMove && (sq===lastMove.from || sq===lastMove.to)) div.classList.add('last');
+      if(selected===sq) div.classList.add('selected');
+      div.addEventListener('click', onSquareClick);
+      boardEl.appendChild(div);
+    }
+  }
+  // check highlight
+  if(game.in_check()){
+    const kingColor = game.turn();
+    const b = game.board();
+    for(let r=0;r<8;r++)for(let f=0;f<8;f++){
+      const p=b[r][f];
+      if(p && p.type==='k' && p.color===kingColor){
+        const sq = squareName(f,r);
+        const el = boardEl.querySelector(`.sq[data-sq="${sq}"]`);
+        if(el) el.classList.add('check');
+      }
+    }
+  }
+  // legal move markers
+  if(selected){
+    legalTargets.forEach(m=>{
+      const el = boardEl.querySelector(`.sq[data-sq="${m.to}"]`);
+      if(!el) return;
+      const marker = document.createElement('div');
+      marker.className = m.captured ? 'ring':'dot';
+      el.appendChild(marker);
+    });
+  }
+}
+
+function onSquareClick(e){
+  if(!gameLive) return;
+  const sq = e.currentTarget.dataset.sq;
+  const piece = game.get(sq);
+
+  if(selected){
+    const move = legalTargets.find(m=>m.to===sq);
+    if(move){
+      attemptMove(selected, sq, move);
+      return;
+    }
+  }
+  // select new piece if it belongs to side to move
+  if(piece && piece.color===game.turn()){
+    selected = sq;
+    legalTargets = game.moves({square:sq, verbose:true});
+  } else {
+    selected = null;
+    legalTargets = [];
+  }
+  buildBoard();
+}
+
+function attemptMove(from,to,moveInfo){
+  const needsPromo = moveInfo.flags.includes('p');
+  if(needsPromo){
+    showPromotion(from,to,moveInfo.color);
+    return;
+  }
+  finalizeMove(from,to,null);
+}
+
+function showPromotion(from,to,color){
+  promoBox.innerHTML='';
+  ['q','r','b','n'].forEach(p=>{
+    const btn=document.createElement('button');
+    btn.textContent = PIECE_GLYPH[color][p];
+    btn.addEventListener('click',()=>{
+      promoOverlay.classList.remove('show');
+      finalizeMove(from,to,p);
+    });
+    promoBox.appendChild(btn);
+  });
+  promoOverlay.classList.add('show');
+}
+
+function finalizeMove(from,to,promotion){
+  const mv = game.move({from,to,promotion: promotion||'q'});
+  if(!mv) return;
+  lastMove = {from,to};
+  selected=null; legalTargets=[];
+  startClockForTurn();
+  buildBoard();
+  renderMoveList();
+  checkGameEnd();
+  updateStatus();
+}
+
+function renderMoveList(){
+  const history = game.history();
+  movesEl.innerHTML='';
+  for(let i=0;i<history.length;i+=2){
+    const row = document.createElement('div');
+    row.className='mv-row';
+    const num = Math.floor(i/2)+1;
+    row.innerHTML = `<div class="mv-num">${num}.</div><div class="mv-w">${history[i]||''}</div><div class="mv-b">${history[i+1]||''}</div>`;
+    movesEl.appendChild(row);
+  }
+  movesEl.scrollTop = movesEl.scrollHeight;
+}
+
+function updateStatus(){
+  if(!gameLive){ return; }
+  if(game.in_checkmate()){
+    return; // handled by checkGameEnd
+  }
+  const turnName = game.turn()==='w' ? 'White':'Black';
+  let msg = `${turnName} to move`;
+  if(game.in_check()) msg += ' — in check';
+  statusLine.textContent = msg;
+}
+
+function checkGameEnd(){
+  if(game.in_checkmate()){
+    const winner = game.turn()==='w' ? 'Black':'White';
+    endGame(`Checkmate`, `${winner} wins the game.`);
+    return true;
+  }
+  if(game.in_stalemate()){
+    endGame('Stalemate', 'Draw — the side to move has no legal move.');
+    return true;
+  }
+  if(game.in_threefold_repetition()){
+    endGame('Draw', 'Draw by threefold repetition.');
+    return true;
+  }
+  if(game.insufficient_material()){
+    endGame('Draw', 'Draw by insufficient material.');
+    return true;
+  }
+  if(game.in_draw()){
+    endGame('Draw', 'Draw by the fifty-move rule.');
+    return true;
+  }
+  return false;
+}
+
+function endGame(title, desc){
+  gameLive=false;
+  stopClock();
+  document.getElementById('endTitle').textContent = title;
+  document.getElementById('endDesc').textContent = desc;
+  endOverlay.classList.add('show');
+}
+
+// --- Clock ---
+function fmt(sec){
+  sec = Math.max(0, Math.ceil(sec));
+  const m = Math.floor(sec/60);
+  const s = sec%60;
+  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+
+function renderClocks(){
+  // top clock shows the side at top of board; bottom shows side at bottom.
+  const bottomColor = flipped ? 'b':'w';
+  const topColor = flipped ? 'w':'b';
+  topLabel.textContent = topColor==='w' ? 'White':'Black';
+  bottomLabel.textContent = bottomColor==='w' ? 'White':'Black';
+  const topTime = topColor==='w' ? timeW : timeB;
+  const bottomTime = bottomColor==='w' ? timeW : timeB;
+  clockTopEl.textContent = clockMinutes>0 ? fmt(topTime) : '—:—';
+  clockBottomEl.textContent = clockMinutes>0 ? fmt(bottomTime) : '—:—';
+  clockTopEl.classList.toggle('active', gameLive && game.turn()===topColor && clockMinutes>0);
+  clockBottomEl.classList.toggle('active', gameLive && game.turn()===bottomColor && clockMinutes>0);
+  clockTopEl.classList.toggle('low', topTime<30 && clockMinutes>0);
+  clockBottomEl.classList.toggle('low', bottomTime<30 && clockMinutes>0);
+}
+
+function startClockForTurn(){
+  if(clockMinutes<=0) return;
+  clockRunning=true;
+}
+
+function stopClock(){
+  clockRunning=false;
+}
+
+function tick(){
+  if(!clockRunning || !gameLive || clockMinutes<=0) return;
+  if(game.turn()==='w'){ timeW -= 0.1; if(timeW<=0){ timeW=0; renderClocks(); endGame('Time out', 'White ran out of time — Black wins.'); return; } }
+  else { timeB -= 0.1; if(timeB<=0){ timeB=0; renderClocks(); endGame('Time out', 'Black ran out of time — White wins.'); return; } }
+  renderClocks();
+}
+
+// --- Controls ---
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  clockMinutes = parseInt(document.getElementById('timeSelect').value,10);
+  timeW = clockMinutes*60;
+  timeB = clockMinutes*60;
+  game = new Chess();
+  selected=null; legalTargets=[]; lastMove=null;
+  gameLive=true;
+  clockRunning = clockMinutes>0;
+  endOverlay.classList.remove('show');
+  buildBoard();
+  renderMoveList();
+  renderClocks();
+  statusLine.textContent = 'White to move';
+});
+
+document.getElementById('flipBtn').addEventListener('click', ()=>{
+  flipped = !flipped;
+  buildBoard();
+  renderClocks();
+});
+
+document.getElementById('playAgainBtn').addEventListener('click', ()=>{
+  endOverlay.classList.remove('show');
+  document.getElementById('startBtn').click();
+});
+
+document.getElementById('resignW').addEventListener('click', ()=>{
+  if(!gameLive) return;
+  endGame('Resignation', 'White resigned — Black wins.');
+});
+document.getElementById('resignB').addEventListener('click', ()=>{
+  if(!gameLive) return;
+  endGame('Resignation', 'Black resigned — White wins.');
+});
+document.getElementById('drawBtn').addEventListener('click', ()=>{
+  if(!gameLive) return;
+  endGame('Draw', 'Both players agreed to a draw.');
+});
+
+setInterval(tick, 100);
+
+// initial paint
+clockMinutes = 5;
+timeW = 300; timeB = 300;
+buildBoard();
+renderClocks();
+</script>
+</body>
+</html>
